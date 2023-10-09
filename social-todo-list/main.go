@@ -39,6 +39,15 @@ type TodoaitemCreation struct {
 }
 
 func (TodoaitemCreation) TableName() string { return TodoItem{}.TableName() }
+
+type TodoaItemUpdate struct {
+	Title       *string `json:"title" gorm:"column:title;"`
+	Description *string `json:"description" gorm:"column:description;"`
+	Status      *string `json:"status" gorm:"column:status;"`
+}
+
+func (TodoaItemUpdate) TableName() string { return TodoItem{}.TableName() }
+
 func main() {
 	// refer https://github.com/go-sql-driver/mysql#dsn-data-source-name for details
 	dsn := "root:my-secret-pw@tcp(127.0.0.1:3307)/todo_list?charset=utf8mb4&parseTime=True&loc=Local"
@@ -64,8 +73,8 @@ func main() {
 			items.POST("", CreateItem(db))
 			items.GET("")
 			items.GET("/:id", GetItem(db))
-			items.PATCH("/:id")
-			items.DELETE("/:id")
+			items.PATCH("/:id", UpdateItem(db))
+			items.DELETE("/:id", DeleteItem(db))
 		}
 	}
 	r.GET("/ping", func(c *gin.Context) {
@@ -117,6 +126,63 @@ func GetItem(db *gorm.DB) func(*gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"data": data,
+		})
+	}
+}
+
+func UpdateItem(db *gorm.DB) func(*gin.Context) {
+	return func(c *gin.Context) {
+		var data TodoaItemUpdate
+		// /v1/items/1
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		if err := c.ShouldBind(&data); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		if err := db.Where("id = ?", id).Updates(&data).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": data,
+		})
+	}
+}
+
+func DeleteItem(db *gorm.DB) func(*gin.Context) {
+	return func(c *gin.Context) {
+
+		// /v1/items/1
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		if err := db.Table(TodoItem{}.TableName()).Where("id = ?", id).Updates(map[string]interface{}{
+			"status": "Deleted",
+		}).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data": "Success",
 		})
 	}
 }
