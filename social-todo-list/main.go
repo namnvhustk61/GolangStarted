@@ -20,6 +20,8 @@ import (
 //   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
 //   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+type ItemStatus int
+
 type TodoItem struct {
 	Id          int        `json:"id" gorm:"column:id;"`
 	Title       string     `json:"title" gorm:"column:title;"`
@@ -48,6 +50,21 @@ type TodoaItemUpdate struct {
 
 func (TodoaItemUpdate) TableName() string { return TodoItem{}.TableName() }
 
+type Paging struct {
+	Page  int   `json:"page" form:"page"`
+	Limit int   `json:"limit" form:"limit"`
+	Total int64 `json:"total" form:"-"`
+}
+
+func (p *Paging) Process() {
+	if p.Page <= 0 {
+		p.Page = 1
+	}
+	if p.Limit <= 0 || p.Limit >= 100 {
+		p.Limit = 10
+	}
+}
+
 func main() {
 	// refer https://github.com/go-sql-driver/mysql#dsn-data-source-name for details
 	dsn := "root:my-secret-pw@tcp(127.0.0.1:3307)/todo_list?charset=utf8mb4&parseTime=True&loc=Local"
@@ -71,7 +88,7 @@ func main() {
 		items := v1.Group("/items")
 		{
 			items.POST("", CreateItem(db))
-			items.GET("")
+			items.GET("", GetListItem(db))
 			items.GET("/:id", GetItem(db))
 			items.PATCH("/:id", UpdateItem(db))
 			items.DELETE("/:id", DeleteItem(db))
@@ -183,6 +200,45 @@ func DeleteItem(db *gorm.DB) func(*gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"data": "Success",
+		})
+	}
+}
+
+func GetListItem(db *gorm.DB) func(*gin.Context) {
+	return func(c *gin.Context) {
+		var paging Paging
+
+		if err := c.ShouldBind(&paging); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		paging.Process()
+
+		var result []TodoItem
+
+		db = db.Where("status <> ?", "Deleted")
+
+		if err := db.Table(TodoItem{}.TableName()).Count(&paging.Total).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		if err := db.Order("id desc").
+			Offset((paging.Page - 1) * paging.Limit).
+			Limit(paging.Limit).
+			Find(&result).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data":   result,
+			"paging": paging,
 		})
 	}
 }
