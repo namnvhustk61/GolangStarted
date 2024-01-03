@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 
 	"social-todo-list/common"
 	"social-todo-list/modules/item/model"
@@ -49,7 +48,7 @@ func main() {
 			items.GET("", GetListItem(db))
 			items.GET("/:id", ginitem.GetItem(db))
 			items.PATCH("/:id", ginitem.UpdateItem(db))
-			items.DELETE("/:id", DeleteItem(db))
+			items.DELETE("/:id", ginitem.DeleteItem(db))
 		}
 	}
 	r.GET("/ping", func(c *gin.Context) {
@@ -58,29 +57,6 @@ func main() {
 		})
 	})
 	r.Run(":3000") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
-}
-
-func DeleteItem(db *gorm.DB) func(*gin.Context) {
-	return func(c *gin.Context) {
-
-		// /v1/items/1
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": err.Error(),
-			})
-			return
-		}
-		if err := db.Table(model.TodoItem{}.TableName()).Where("id = ?", id).Updates(map[string]interface{}{
-			"status": "Deleted",
-		}).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": err.Error(),
-			})
-			return
-		}
-		c.JSON(http.StatusOK, common.SimpleSuccessResponse(true))
-	}
 }
 
 func GetListItem(db *gorm.DB) func(*gin.Context) {
